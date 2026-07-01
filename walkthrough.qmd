@@ -1,0 +1,174 @@
+---
+title: "ReaDo-CVAE Walkthrough"
+subtitle: "Training & evaluation on macOS with MPS/CPU via uv"
+author: "ReaDo-CVAE Team"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: false
+    fig-width: 8
+    fig-height: 6
+execute:
+  freeze: auto
+  echo: true
+  warning: false
+jupyter: reado-cvae
+---
+
+## Overview
+
+This walkthrough demonstrates how to run **ReaDo-CVAE** end-to-end on macOS (Apple Silicon) using `uv` for dependency management and PyTorch with MPS/CPU fallback.
+
+Key changes from the original conda/CUDA setup:
+
+- **Dependencies** are declared in `pyproject.toml` and managed with `uv`.
+- **Device auto-detection** prefers `mps` on Apple Silicon, then `cuda`, then `cpu`.
+- **`PYTORCH_ENABLE_MPS_FALLBACK=1`** is set because `torch.poisson` (used during sampling) is not yet implemented for MPS; it transparently falls back to CPU for that operator only.
+- **Paths** in evaluation scripts were fixed to be relative to the project root.
+
+## Environment Setup
+
+Install dependencies with uv:
+
+```bash
+uv sync
+```
+
+Verify PyTorch and device availability:
+
+```{python}
+import os
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+import torch
+print(f"PyTorch version: {torch.__version__}")
+print(f"MPS available:   {torch.backends.mps.is_available()}")
+print(f"CUDA available:  {torch.cuda.is_available()}")
+
+if torch.backends.mps.is_available():
+    device = "mps"
+elif torch.cuda.is_available():
+    device = "cuda"
+else:
+    device = "cpu"
+print(f"Selected device: {device}")
+```
+
+## Load Demo Data
+
+The demo dataset contains ~1,000 cells and 3,000 highly variable genes with cell-type annotations.
+
+```{python}
+import scanpy as sc
+import warnings
+warnings.filterwarnings('ignore')
+
+adata = sc.read_h5ad("data/demo_data.h5ad")
+print(adata)
+print("\nCell type counts:")
+print(adata.obs['cell_type'].value_counts().head())
+```
+
+## Train ReaDo-CVAE
+
+Initialize the model and train for a small number of epochs so the walkthrough renders quickly. In practice you would train for longer (e.g., 1,000–3,000 epochs).
+
+```{python}
+from reado_cvae import ReaDoCVAE
+
+model = ReaDoCVAE(
+    adata,
+    cell_type_key="cell_type",
+    n_latent=100,
+    hidden_dims=[1024, 512, 512, 256, 256, 128],
+    dropout_rate=0.1,
+    beta=2.0,
+    device=device,
+)
+
+# Train for 50 epochs as a quick demonstration
+model.train(epochs=50, batch_size=256, lr=1e-5)
+```
+
+## Generate Synthetic Doublets
+
+### All cell types (matching original proportions)
+
+```{python}
+synthetic_all = model.sample()
+print(f"Synthetic all shape: {synthetic_all.shape}")
+synthetic_all.write("result/synthetic_all_walkthrough.h5ad")
+```
+
+### Single cell type
+
+```{python}
+synthetic_t = model.sample(cell_type=10, n_cells=500)
+print(f"Synthetic type-10 shape: {synthetic_t.shape}")
+synthetic_t.write("result/synthetic_10_walkthrough.h5ad")
+```
+
+## Evaluate Distributional Similarity
+
+Compare real and synthetic cells for type `10` using six metrics.
+
+```{python}
+import numpy as np
+from evaluation.metrics import evaluate_generated_data
+
+np.random.seed(42)
+torch.manual_seed(42)
+
+real_adata = sc.read_h5ad("data/demo_data.h5ad")
+real_data = real_adata[real_adata.obs['cell_type'] == 10].X
+
+# Use the synthetic type-10 generated above
+gen_data = synthetic_t.X
+
+# Sub-sample for fair comparison
+n_samples = min(500, real_data.shape[0], gen_data.shape[0])
+real_idx = np.random.choice(real_data.shape[0], n_samples, replace=False)
+gen_idx = np.random.choice(gen_data.shape[0], n_samples, replace=False)
+
+results = evaluate_generated_data(
+    real_data[real_idx],
+    gen_data[gen_idx],
+    gen_method_name="ReaDo-CVAE (walkthrough)"
+)
+```
+
+## Compute CCS & ACP
+
+Read pre-computed algorithm predictions and compute cross-algorithm consensus.
+
+```{python}
+import pandas as pd
+from evaluation.ccs_acp import compute_ccs_acp
+
+df = pd.read_csv("data/demo_results.csv")
+result = compute_ccs_acp(
+    df,
+    algorithm_col='algorithm',
+    score_col='score',
+    pred_col='pred_label',
+    name_col='name'
+)
+print(result)
+```
+
+## Reproducibility Checklist
+
+| Item | Status |
+|------|--------|
+| Python environment managed by `uv` | ✅ `pyproject.toml` + `.venv` |
+| Apple Silicon / MPS compatible | ✅ Auto-detect + CPU fallback |
+| No hard-coded CUDA | ✅ |
+| Relative data paths | ✅ |
+| Executable walkthrough | ✅ This document |
+
+## Next Steps
+
+- Increase `epochs` in `model.train()` for production-quality synthetic data.
+- Adjust `n_latent`, `hidden_dims`, and `beta` for your own datasets.
+- Use `model.save()` and `ReaDoCVAE.load()` to checkpoint trained models.
