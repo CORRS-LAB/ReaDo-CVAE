@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reado-cvae"
+version = "0.1.0"
+description = "ReaDo-CVAE: conditional variational autoencoder for doublet synthesis in single-cell RNA sequencing data"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+authors = [
+    { name = "Wei Sun" },
+    { name = "Xiaoqing Pan" },
+    { name = "Yifan Yang" },
+]
+keywords = [
+    "single-cell",
+    "rna-seq",
+    "doublet",
+    "vae",
+    "deep-learning",
+    "generative-model",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "torch>=1.13",
+    "torchvision",
+    "torchaudio",
+    "numpy",
+    "pandas",
+    "scipy",
+    "anndata",
+    "scanpy",
+    "scikit-learn",
+    "tqdm",
+    "matplotlib",
+    "seaborn",
+    "pyyaml",
+    "leidenalg",
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "nbformat>=5.10.4",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.9",
+    "python-dotenv>=1.0.0",
+    "redis>=5.0.0",
+    "aiosqlite>=0.20.0",
+    "openai>=1.30.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/xxx/ReaDo-CVAE"
+Repository = "https://github.com/xxx/ReaDo-CVAE.git"
+
+[tool.hatch.build.targets.wheel]
+packages = ["reado_cvae"]
+
+[dependency-groups]
+dev = [
+    "requests>=2.31.0",
+    "httpx>=0.27.0",
+]
